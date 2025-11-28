@@ -1,11 +1,10 @@
-import React, { useCallback, useState, useRef, useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import EventCard from "./EventCard";
 
-
-
-const eventsSeed = [
+const seed = [
   { id: 1, title: "React Conf 2026" },
   { id: 2, title: "Node Summit" },
-  { id: 3, title: "Frontend Masters" },
+  { id: 3, title: "Frontend Masters" }
 ];
 
 function useRenderCount(name) {
@@ -18,142 +17,140 @@ function useRenderCount(name) {
 }
 
 
-const EventCard = React.memo(function EventCard({ event, onBook }) {
-  useRenderCount(`EventCard ${event.id}`);
-
-  
-  const handlerRef = useRef();
-  useEffect(() => {
-    const changed = handlerRef.current && handlerRef.current !== onBook;
-    if (changed) console.log(`Handler identity changed for event ${event.id}`);
-    handlerRef.current = onBook;
-  }, [onBook, event.id]);
-
-  return (
-    <div className="p-4 border rounded mb-2 flex justify-between items-center">
-      <div>
-        <div className="font-semibold">{event.title}</div>
-        <div className="text-sm text-gray-500">Event ID: {event.id}</div>
-      </div>
-      <button
-        onClick={() => onBook(event.id)}
-        className="px-3 py-1 rounded bg-blue-600 text-white"
-      >
-        Book Event
-      </button>
-    </div>
-  );
-});
+function fakeBookApi(id) {
+  return new Promise((res) => {
+    const delay = 600 + Math.random() * 600;
+    setTimeout(() => {
+      res({ id, when: new Date().toISOString(), success: true });
+    }, delay);
+  });
+}
 
 export default function App() {
   useRenderCount("App");
 
-  const [events, setEvents] = useState(eventsSeed);
-  const [useMemoizedHandlers, setUseMemoizedHandlers] = useState(true);
-  const [bookings, setBookings] = useState([]);
+  const [events, setEvents] = useState(seed);
+  const [bookingsMemo, setBookingsMemo] = useState([]);
+  const [bookingsNon, setBookingsNon] = useState([]);
+  const [loading, setLoading] = useState({});
 
-  
-  const nonMemoizedOnBook = (id) => {
-    console.log("nonMemoizedOnBook called for", id);
-    setBookings((b) => [...b, { id, when: new Date().toISOString() }]);
+  const nonMemoOnBook = (id) => {
+    console.log("nonMemoOnBook →", id);
+    setLoading((s) => ({ ...s, [id]: true }));
+    fakeBookApi(id).then((res) => {
+      setBookingsNon((b) => [...b, res]);
+      setLoading((s) => ({ ...s, [id]: false }));
+    });
   };
 
-  
-  const memoizedOnBook = useCallback(
-    (id) => {
-      console.log("memoizedOnBook called for", id);
-      setBookings((b) => [...b, { id, when: new Date().toISOString() }]);
-    },
-    
-    []
-  );
+  const memoOnBook = useCallback((id) => {
+    console.log("memoOnBook →", id);
+    setLoading((s) => ({ ...s, [id]: true }));
+    fakeBookApi(id).then((res) => {
+      setBookingsMemo((b) => [...b, res]);
+      setLoading((s) => ({ ...s, [id]: false }));
+    });
+  }, []);
 
-  
-  const createHandler = (eventId) => {
-    if (useMemoizedHandlers) {
-      
-      if (!createHandler._map) createHandler._map = new Map();
-      if (!createHandler._map.has(eventId)) {
-        const fn = (id) => {
-          console.log("per-event memoized handler called for", id);
-          setBookings((b) => [...b, { id, when: new Date().toISOString() }]);
-        };
-        createHandler._map.set(eventId, fn);
-        console.log(`Created stable per-event handler for ${eventId}`);
-      }
-      return createHandler._map.get(eventId);
+  const mapRef = useRef(new Map());
+  const getStableHandler = useCallback((eventId) => {
+    if (!mapRef.current.has(eventId)) {
+      mapRef.current.set(eventId, (id) => {
+        console.log("stable handler →", id);
+        setLoading((s) => ({ ...s, [id]: true }));
+        fakeBookApi(id).then((res) => {
+          setBookingsMemo((b) => [...b, res]);
+          setLoading((s) => ({ ...s, [id]: false }));
+        });
+      });
+      console.log("Created stable handler for", eventId);
     }
-
-    
-    console.log(`Created NON-stable per-event handler for ${eventId}`);
-    return (id) => {
-      console.log("dynamic handler called for", id);
-      setBookings((b) => [...b, { id, when: new Date().toISOString() }]);
-    };
-  };
+    return mapRef.current.get(eventId);
+  }, []);
 
   const addEvent = () => {
-    const nextId = events.length ? events[events.length - 1].id + 1 : 1;
-    setEvents((e) => [...e, { id: nextId, title: `New Event ${nextId}` }]);
+    const next = events.length ? events[events.length - 1].id + 1 : 1;
+    setEvents((e) => [...e, { id: next, title: `New Event ${next}` }]);
   };
 
-  const clearBookings = () => setBookings([]);
+  const clearBookings = () => {
+    setBookingsMemo([]);
+    setBookingsNon([]);
+  };
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Event Booking Demo</h1>
+    <div className="container">
+      <div className="header">
+        <div className="title">
+          <div className="logo">EB</div>
+          <div>
+            <h1>Event Booking — Memoized vs Non-memoized</h1>
+            <div className="header-sub">Compare performance with stable handlers</div>
+          </div>
+        </div>
 
-      <div className="mb-4 flex gap-2">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={useMemoizedHandlers}
-            onChange={(e) => setUseMemoizedHandlers(e.target.checked)}
-          />
-          Use stable (memoized) per-event handlers
-        </label>
-
-        <button onClick={addEvent} className="px-3 py-1 rounded bg-green-600 text-white">
-          Add Event
-        </button>
-
-        <button onClick={clearBookings} className="px-3 py-1 rounded bg-gray-600 text-white">
-          Clear Bookings
-        </button>
+        <div className="controls">
+          <button className="btn" onClick={addEvent}>Add event</button>
+          <button className="btn ghost" onClick={clearBookings}>Clear bookings</button>
+        </div>
       </div>
 
-      <div>
-        {events.map((ev) => (
-          <EventCard
-            key={ev.id}
-            event={ev}
-            
-            onBook={useMemoizedHandlers ? createHandler(ev.id) : createHandler(ev.id)}
-          />
-        ))}
-      </div>
+      <div className="grid">
+        {}
+        <div className="card">
+          <div className="card-header">
+            <strong>Memoized flow</strong>
+            <span className="badge">useCallback + stable handlers</span>
+          </div>
 
-      <div className="mt-6">
-        <h2 className="font-semibold">Bookings ({bookings.length})</h2>
-        <ul>
-          {bookings.map((b, i) => (
-            <li key={i} className="text-sm text-gray-700">
-              Event {b.id} at {new Date(b.when).toLocaleTimeString()}
-            </li>
+          {events.map((ev) => (
+            <EventCard
+              key={`m-${ev.id}`}
+              event={ev}
+              loading={!!loading[ev.id]}
+              onBook={getStableHandler(ev.id)}
+            />
           ))}
-        </ul>
-      </div>
 
-      <div className="mt-4 text-sm text-gray-500">
-        <strong>How to test:</strong>
-        <ol className="list-decimal ml-6">
-          <li>Open the browser console (DevTools).</li>
-          <li>Toggle the "Use stable (memoized) per-event handlers" checkbox on/off.</li>
-          <li>Click "Add Event" and watch for console logs named "Created stable..." or "Created NON-stable...".</li>
-          <li>Re-render the App (e.g., add an event) and observe EventCard render logs.
-            With stable handlers, EventCard won't re-render just because the parent's function identity changed.
-          </li>
-        </ol>
+          <div className="bookings">
+            <strong>Memo bookings</strong>
+            <ul>
+              {bookingsMemo.map((b, i) => (
+                <li key={i}>
+                  Event {b.id} at {new Date(b.when).toLocaleTimeString()}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {}
+        <div className="card">
+          <div className="card-header">
+            <strong>Non-memoized flow</strong>
+            <span className="badge">new handler every render</span>
+          </div>
+
+          {events.map((ev) => (
+            <EventCard
+              key={`n-${ev.id}`}
+              event={ev}
+              loading={!!loading[ev.id]}
+              onBook={() => nonMemoOnBook(ev.id)}
+            />
+          ))}
+
+          <div className="bookings">
+            <strong>Non-memo bookings</strong>
+            <ul>
+              {bookingsNon.map((b, i) => (
+                <li key={i}>
+                  Event {b.id} at {new Date(b.when).toLocaleTimeString()}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );
