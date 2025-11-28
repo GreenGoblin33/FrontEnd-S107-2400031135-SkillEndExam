@@ -1,8 +1,6 @@
 import React, { useCallback, useState, useRef, useEffect } from "react";
 
-// Simple Event Booking demo to show useCallback performance benefits
-// - Toggle `useCallback` on/off to see console differences
-// - Child is memoized with React.memo so it only re-renders when props change
+
 
 const eventsSeed = [
   { id: 1, title: "React Conf 2026" },
@@ -19,11 +17,11 @@ function useRenderCount(name) {
   return ref.current;
 }
 
-// Memoized child: receives onBook and label
+
 const EventCard = React.memo(function EventCard({ event, onBook }) {
   useRenderCount(`EventCard ${event.id}`);
 
-  // Detect if the handler identity changed
+  
   const handlerRef = useRef();
   useEffect(() => {
     const changed = handlerRef.current && handlerRef.current !== onBook;
@@ -54,28 +52,26 @@ export default function App() {
   const [useMemoizedHandlers, setUseMemoizedHandlers] = useState(true);
   const [bookings, setBookings] = useState([]);
 
-  // Non-memoized handler (recreated on every render)
+  
   const nonMemoizedOnBook = (id) => {
     console.log("nonMemoizedOnBook called for", id);
     setBookings((b) => [...b, { id, when: new Date().toISOString() }]);
   };
 
-  // Memoized handler using useCallback
+  
   const memoizedOnBook = useCallback(
     (id) => {
       console.log("memoizedOnBook called for", id);
       setBookings((b) => [...b, { id, when: new Date().toISOString() }]);
     },
-    // empty deps — stable identity unless intentionally changed
+    
     []
   );
 
-  // A factory that creates per-event handlers (also memoized when enabled)
+  
   const createHandler = (eventId) => {
     if (useMemoizedHandlers) {
-      // return a stable function per-event using useCallback + a ref wrapper
-      // NOTE: we create a per-event memoized handler by storing in a ref map
-      // We'll keep it simple: use a ref to store previously created handlers
+      
       if (!createHandler._map) createHandler._map = new Map();
       if (!createHandler._map.has(eventId)) {
         const fn = (id) => {
@@ -88,7 +84,7 @@ export default function App() {
       return createHandler._map.get(eventId);
     }
 
-    // if not using memoized handlers, return a new function every time
+    
     console.log(`Created NON-stable per-event handler for ${eventId}`);
     return (id) => {
       console.log("dynamic handler called for", id);
@@ -131,7 +127,7 @@ export default function App() {
           <EventCard
             key={ev.id}
             event={ev}
-            // toggle which handler we pass
+            
             onBook={useMemoizedHandlers ? createHandler(ev.id) : createHandler(ev.id)}
           />
         ))}
